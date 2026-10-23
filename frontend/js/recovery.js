@@ -1,12 +1,12 @@
 // AeroCold Recovery Planner Controller
 import { api } from './api.js';
+import { showToast } from './common-ui.js';
 
 let currentPlanId = 'PLAN-7741';
 
 async function initRecoveryPlanner() {
   try {
     const facilities = await api.getFacilities();
-    // Check if plan already approved
     const plans = await api.getRecoveryPlans('INC-8921-TH');
     if (plans && plans.length > 0) {
       currentPlanId = plans[0].id;
@@ -17,6 +17,9 @@ async function initRecoveryPlanner() {
   } catch (err) {
     console.warn('Backend sync warning:', err);
   }
+
+  // Strategy Filter Tabs
+  setupStrategyTabs();
 
   // Recalculate button
   const recalcBtn = document.getElementById('recalc-btn');
@@ -41,8 +44,8 @@ async function initRecoveryPlanner() {
     };
   }
 
-  // Authorize diversion button
-  const authBtn = document.getElementById('auth-diversion-btn');
+  // Authorize diversion button (Cold Storage A)
+  const authBtn = document.getElementById('auth-diversion-btn') || Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Select & Authorize Diversion'));
   if (authBtn) {
     authBtn.onclick = async () => {
       authBtn.disabled = true;
@@ -64,36 +67,60 @@ async function initRecoveryPlanner() {
       }
     };
   }
+
+  // Secondary fallback button (Oakland Cold Hub)
+  const secondaryBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Select as Secondary Fallback'));
+  if (secondaryBtn) {
+    secondaryBtn.onclick = () => {
+      secondaryBtn.className = 'w-full py-2.5 px-4 rounded bg-surface-container-high text-on-surface font-label-md font-semibold flex items-center justify-center gap-1.5';
+      secondaryBtn.innerHTML = '<span class="material-symbols-outlined text-[16px] text-primary">check</span><span>Selected as Active Fallback (Oakland Hub)</span>';
+      showToast('Oakland Metro Cold Hub staged as secondary fallback buffer.');
+    };
+  }
+
+  // View Detailed Telematics button
+  const viewTelematicsBtns = Array.from(document.querySelectorAll('button')).filter(b => b.textContent.includes('View Detailed Telematics'));
+  viewTelematicsBtns.forEach(b => {
+    b.onclick = () => { window.location.href = 'incident.html?id=INC-8921-TH'; };
+  });
+
+  // Cold-Chain Custody Lock button
+  const custodyLockBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Cold-Chain Custody Lock'));
+  if (custodyLockBtn) {
+    custodyLockBtn.onclick = () => {
+      showToast('Digital electronic seal lock verified for cargo compartment #889-C.');
+    };
+  }
+}
+
+function setupStrategyTabs() {
+  const strategyBtns = Array.from(document.querySelectorAll('button')).filter(b => 
+    b.textContent.includes('Minimize Cargo Risk') ||
+    b.textContent.includes('Minimize Recovery Time') ||
+    b.textContent.includes('Maximize Net Salvage Value')
+  );
+
+  strategyBtns.forEach(btn => {
+    btn.onclick = () => {
+      strategyBtns.forEach(b => {
+        b.className = 'px-3 py-1.5 rounded font-label-sm text-label-sm text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors';
+      });
+      btn.className = 'px-3 py-1.5 rounded bg-surface-container-lowest font-label-sm text-label-sm text-on-surface font-semibold shadow-sm';
+      showToast(`Matrix filtered by strategy: ${btn.textContent.trim()}`);
+    };
+  });
 }
 
 function markDiversionDispatched() {
-  const authBtn = document.getElementById('auth-diversion-btn');
+  const authBtn = document.getElementById('auth-diversion-btn') || Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Select & Authorize Diversion'));
   if (authBtn) {
     authBtn.innerHTML = `
       <span class="material-symbols-outlined text-[16px] text-on-primary">check_circle</span>
       <span>DIVERSION DISPATCHED TO TRUCK</span>
     `;
-    authBtn.classList.remove('bg-primary');
-    authBtn.classList.add('bg-secondary');
+    authBtn.className = 'w-full py-2.5 px-4 rounded bg-secondary text-on-primary font-label-md font-semibold flex items-center justify-center gap-1.5 shadow-sm';
     authBtn.disabled = true;
   }
-}
-
-function showToast(msg) {
-  let toast = document.getElementById('aerocold-toast');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'aerocold-toast';
-    toast.className = 'fixed bottom-6 right-6 z-50 bg-primary text-on-primary px-4 py-3 rounded-lg shadow-xl font-label-md text-label-md flex items-center gap-2 transition-all duration-300';
-    document.body.appendChild(toast);
-  }
-  toast.innerHTML = `<span class="material-symbols-outlined text-[18px]">verified</span><span>${msg}</span>`;
-  toast.style.opacity = '1';
-  toast.style.transform = 'translateY(0)';
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(16px)';
-  }, 4500);
 }
 
 document.addEventListener('DOMContentLoaded', initRecoveryPlanner);

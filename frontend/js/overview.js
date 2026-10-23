@@ -1,5 +1,6 @@
 // AeroCold Operations Overview Controller
 import { api } from './api.js';
+import { showToast } from './common-ui.js';
 
 let currentPlanId = 'PLAN-7741';
 let currentIncidentId = 'INC-8921-TH';
@@ -12,6 +13,9 @@ async function initOverview() {
   } catch (err) {
     console.warn('Backend sync warning:', err);
   }
+
+  // Setup Fleet Filter Buttons
+  setupFleetFilters();
 
   // Setup Authorize Diversion Button
   const authBtn = document.getElementById('authorize-btn');
@@ -53,32 +57,49 @@ async function initOverview() {
   }
 
   // Setup Simulate Thermal Spike Button
-  const simBtn = document.getElementById('toggle-sim-btn');
-  if (simBtn) {
-    simBtn.addEventListener('click', async () => {
-      simBtn.disabled = true;
+  const simBtns = [
+    document.getElementById('toggle-sim-btn'),
+    Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Simulate Thermal Spike'))
+  ].filter(Boolean);
+
+  simBtns.forEach(btn => {
+    btn.onclick = async () => {
+      btn.disabled = true;
       try {
         const res = await api.simulateSpike(currentIncidentId);
-        simBtn.classList.toggle('bg-primary');
-        simBtn.classList.toggle('text-on-primary');
-        simBtn.classList.toggle('text-on-surface');
-        simBtn.querySelector('span:last-child').textContent = `Spike Active (+${res.new_temp_c}°C)`;
+        btn.classList.toggle('bg-primary');
+        btn.classList.toggle('text-on-primary');
+        btn.classList.toggle('text-on-surface');
+        const textSpan = btn.querySelector('span:last-child') || btn;
+        textSpan.textContent = `Spike Active (+${res.new_temp_c}°C)`;
 
-        // Update core temp on screen
-        const tempDisplays = document.querySelectorAll('.font-display-hero');
-        tempDisplays.forEach(el => el.textContent = res.new_temp_c);
+        // Update core temp readouts across screen
+        document.querySelectorAll('.font-display-hero').forEach(el => el.textContent = res.new_temp_c);
 
         showToast(`Thermal surge simulated: Core temp is now ${res.new_temp_c}°C (+0.35°C/min)`);
         loadRecentLogs();
       } catch (err) {
         console.error(err);
       } finally {
-        simBtn.disabled = false;
+        btn.disabled = false;
       }
-    });
+    };
+  });
+
+  // Wire Map Elements (AC-2048 card & Cold Storage A card)
+  const ac2048Card = document.querySelector('.absolute.left-\\[410px\\]');
+  if (ac2048Card) {
+    ac2048Card.style.cursor = 'pointer';
+    ac2048Card.onclick = () => { window.location.href = 'incident.html?id=INC-8921-TH'; };
   }
 
-  // Wire navigation buttons inside overview page
+  const coldStorageCard = document.querySelector('.absolute.right-6.top-8');
+  if (coldStorageCard) {
+    coldStorageCard.style.cursor = 'pointer';
+    coldStorageCard.onclick = () => { window.location.href = 'recovery.html'; };
+  }
+
+  // Wire buttons inside overview
   document.querySelectorAll('a').forEach(a => {
     if (a.textContent.includes('Open Incident Workspace AC-2048')) {
       a.href = 'incident.html?id=INC-8921-TH';
@@ -89,20 +110,41 @@ async function initOverview() {
     if (btn.textContent.includes('Compare 3 Alternate Cold Hubs') || btn.textContent.includes('Compare 3 Alternate')) {
       btn.onclick = () => { window.location.href = 'recovery.html'; };
     }
-    if (btn.textContent.includes('Simulate Thermal Spike')) {
-      btn.onclick = () => {
-        if (simBtn) simBtn.click();
-      };
-    }
     if (btn.textContent.includes('Refresh Telemetry')) {
       btn.onclick = async () => {
         btn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">sync</span><span>Syncing...</span>';
         await initOverview();
         setTimeout(() => {
           btn.innerHTML = '<span class="material-symbols-outlined text-[16px]">sync</span><span>Refresh Telemetry</span>';
+          showToast('Telemetry synchronized across 48 units.');
         }, 500);
       };
     }
+  });
+}
+
+function setupFleetFilters() {
+  const filterBtns = Array.from(document.querySelectorAll('button')).filter(b => 
+    b.textContent.trim() === 'ALL FLEETS' ||
+    b.textContent.trim() === 'PERISHABLES' ||
+    b.textContent.trim() === 'PHARMA' ||
+    b.textContent.includes('HIGH RISK')
+  );
+
+  filterBtns.forEach(btn => {
+    btn.onclick = () => {
+      filterBtns.forEach(b => {
+        b.className = 'px-2.5 py-1 rounded font-label-sm text-label-sm text-secondary hover:text-on-surface hover:bg-surface-container-high transition-colors';
+      });
+      btn.className = 'px-2.5 py-1 rounded bg-surface-container-lowest font-label-sm text-label-sm text-on-surface font-semibold shadow-[0_1px_2px_rgba(0,0,0,0.03)]';
+      
+      const filterName = btn.textContent.trim();
+      if (filterName.includes('HIGH RISK')) {
+        showToast('Filtering for active critical breach: Unit AC-2048');
+      } else {
+        showToast(`Fleet filtered by category: ${filterName}`);
+      }
+    };
   });
 }
 
@@ -146,23 +188,6 @@ async function loadRecentLogs() {
   } catch (err) {
     console.warn('Could not refresh activity logs:', err);
   }
-}
-
-function showToast(msg) {
-  let toast = document.getElementById('aerocold-toast');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'aerocold-toast';
-    toast.className = 'fixed bottom-6 right-6 z-50 bg-primary text-on-primary px-4 py-3 rounded-lg shadow-xl font-label-md text-label-md flex items-center gap-2 transition-all duration-300';
-    document.body.appendChild(toast);
-  }
-  toast.innerHTML = `<span class="material-symbols-outlined text-[18px]">verified</span><span>${msg}</span>`;
-  toast.style.opacity = '1';
-  toast.style.transform = 'translateY(0)';
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(16px)';
-  }, 4000);
 }
 
 document.addEventListener('DOMContentLoaded', initOverview);
